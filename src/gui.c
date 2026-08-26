@@ -51,6 +51,7 @@
 #include <string.h>
 #include <strings.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include "nwipe.h"
 #include "context.h"
@@ -708,7 +709,9 @@ void nwipe_gui_create_main_window()
 void nwipe_gui_create_header_window()
 {
     char anon_label[] = " (ANONYMIZED)";
-    char bannerplus[80];
+    char hostname[256]; /* generous; RFC 1035 caps a FQDN at 255 chars */
+    /* "Host: " + hostname + " | " + banner + " (ANONYMIZED)" + slack */
+    char bannerplus[sizeof( hostname ) + 128];
 
     /* Create the header window. */
     header_window = newwin( NWIPE_GUI_HEADER_H, NWIPE_GUI_HEADER_W, NWIPE_GUI_HEADER_Y, NWIPE_GUI_HEADER_X );
@@ -728,12 +731,25 @@ void nwipe_gui_create_header_window()
     /* Clear the header window. */
     werase( header_window );
 
-    /* If in anonymized mode modify the title banner to reflect this */
-    strcpy( bannerplus, banner );
+    /* Prefix the banner with the server's hostname when one is available,
+     * producing "Host: <hostname> | <banner>". If the hostname cannot be
+     * determined (or is empty), fall back to just the banner. */
+    if( gethostname( hostname, sizeof( hostname ) ) == 0 && hostname[0] != '\0' )
+    {
+        /* Ensure the hostname is NUL-terminated (gethostname may not
+         * terminate on truncation). */
+        hostname[sizeof( hostname ) - 1] = '\0';
+        snprintf( bannerplus, sizeof( bannerplus ), "Host: %s | %s", hostname, banner );
+    }
+    else
+    {
+        strcpy( bannerplus, banner );
+    }
 
+    /* If in anonymized mode modify the title banner to reflect this */
     if( nwipe_options.quiet )
     {
-        strcat( bannerplus, anon_label );
+        strncat( bannerplus, anon_label, sizeof( bannerplus ) - strlen( bannerplus ) - 1 );
     }
 
     /* Print the product banner. */
