@@ -48,6 +48,7 @@
 #include <panel.h>
 #include <stdint.h>
 #include <libconfig.h>
+#include <stdio.h>
 #include <string.h>
 #include <strings.h>
 #include <sys/stat.h>
@@ -710,8 +711,9 @@ void nwipe_gui_create_header_window()
 {
     char anon_label[] = " (ANONYMIZED)";
     char hostname[256]; /* generous; RFC 1035 caps a FQDN at 255 chars */
-    /* "Host: " + hostname + " | " + banner + " (ANONYMIZED)" + slack */
-    char bannerplus[sizeof( hostname ) + 128];
+    char serial[128];   /* SMBIOS chassis/system serial from DMI */
+    /* "Host: " + hostname + " | S/N: " + serial + " | " + banner + slack */
+    char bannerplus[sizeof( hostname ) + sizeof( serial ) + 128];
 
     /* Create the header window. */
     header_window = newwin( NWIPE_GUI_HEADER_H, NWIPE_GUI_HEADER_W, NWIPE_GUI_HEADER_Y, NWIPE_GUI_HEADER_X );
@@ -731,15 +733,53 @@ void nwipe_gui_create_header_window()
     /* Clear the header window. */
     werase( header_window );
 
-    /* Prefix the banner with the server's hostname when one is available,
-     * producing "Host: <hostname> | <banner>". If the hostname cannot be
-     * determined (or is empty), fall back to just the banner. */
+    /* Read the host's serial number from SMBIOS/DMI. This file only exists
+     * on physical machines (and is readable by root, which nwipe already
+     * requires); on VMs and inside containers it is typically absent, empty,
+     * or a placeholder such as "Not Specified" / "None". Treat any such
+     * value as "no serial" so the header stays clean. */
+    serial[0] = '\0';
+    {
+        FILE* fp = fopen( "/sys/class/dmi/id/product_serial", "r" );
+        if( fp != NULL )
+        {
+            if( fgets( serial, sizeof( serial ), fp ) != NULL )
+            {
+                /* Strip the trailing newline. */
+                serial[strcspn( serial, "\r\n" )] = '\0';
+            }
+            fclose( fp );
+        }
+
+        /* Reject known placeholder / junk serials. */
+        if( serial[0] == '\0' || strcasecmp( serial, "None" ) == 0
+            || strcasecmp( serial, "Not Specified" ) == 0
+            || strcasecmp( serial, "To Be Filled By O.E.M." ) == 0
+            || strcasecmp( serial, "System Serial Number" ) == 0
+            || strcasecmp( serial, "Default string" ) == 0 )
+        {
+            serial[0] = '\0';
+        }
+    }
+
+    /* Prefix the banner with the server's hostname (and serial, when known),
+     * producing "Host: <hostname> | S/N: <serial> | <banner>". If the serial
+     * is unavailable, drop the "S/N:" segment; if even the hostname cannot be
+     * determined, fall back to just the banner. */
     if( gethostname( hostname, sizeof( hostname ) ) == 0 && hostname[0] != '\0' )
     {
         /* Ensure the hostname is NUL-terminated (gethostname may not
          * terminate on truncation). */
         hostname[sizeof( hostname ) - 1] = '\0';
-        snprintf( bannerplus, sizeof( bannerplus ), "Host: %s | %s", hostname, banner );
+
+        if( serial[0] != '\0' )
+        {
+            snprintf( bannerplus, sizeof( bannerplus ), "Host: %s | S/N: %s | %s", hostname, serial, banner );
+        }
+        else
+        {
+            snprintf( bannerplus, sizeof( bannerplus ), "Host: %s | %s", hostname, banner );
+        }
     }
     else
     {
