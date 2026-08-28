@@ -707,13 +707,44 @@ void nwipe_gui_create_main_window()
 
 } /* nwipe_gui_create_main_window */
 
+/* Read a DMI/SMBIOS string field from sysfs (e.g. product_serial,
+ * chassis_serial) into 'out'. The kernel parses the SMBIOS tables at boot
+ * and exposes these as plain root-readable files, so no dmidecode subprocess
+ * is required. On VMs and inside containers the file is typically absent,
+ * empty, or a placeholder such as "Not Specified" / "None"; any such value is
+ * normalised to an empty string so callers can treat it as "no value". */
+static void nwipe_read_dmi_field( const char* path, char* out, size_t len )
+{
+    out[0] = '\0';
+
+    FILE* fp = fopen( path, "r" );
+    if( fp != NULL )
+    {
+        if( fgets( out, len, fp ) != NULL )
+        {
+            /* Strip the trailing newline. */
+            out[strcspn( out, "\r\n" )] = '\0';
+        }
+        fclose( fp );
+    }
+
+    /* Reject known placeholder / junk values. */
+    if( out[0] == '\0' || strcasecmp( out, "None" ) == 0 || strcasecmp( out, "Not Specified" ) == 0
+        || strcasecmp( out, "To Be Filled By O.E.M." ) == 0 || strcasecmp( out, "System Serial Number" ) == 0
+        || strcasecmp( out, "Default string" ) == 0 )
+    {
+        out[0] = '\0';
+    }
+}
+
 void nwipe_gui_create_header_window()
 {
     char anon_label[] = " (ANONYMIZED)";
-    char hostname[256]; /* generous; RFC 1035 caps a FQDN at 255 chars */
-    char serial[128];   /* SMBIOS chassis/system serial from DMI */
-    /* "Host: " + hostname + " | S/N: " + serial + " | " + banner + slack */
-    char bannerplus[sizeof( hostname ) + sizeof( serial ) + 128];
+    char hostname[256];       /* generous; RFC 1035 caps a FQDN at 255 chars */
+    char sys_serial[128];     /* DMI type 1 (system/board) serial     */
+    char chassis_serial[128]; /* DMI type 3 (chassis/enclosure) serial */
+    /* hostname + both serials + banner + "(ANONYMIZED)" + framing text + slack */
+    char bannerplus[sizeof( hostname ) + sizeof( sys_serial ) + sizeof( chassis_serial ) + 128];
 
     /* Create the header window. */
     header_window = newwin( NWIPE_GUI_HEADER_H, NWIPE_GUI_HEADER_W, NWIPE_GUI_HEADER_Y, NWIPE_GUI_HEADER_X );
@@ -733,52 +764,42 @@ void nwipe_gui_create_header_window()
     /* Clear the header window. */
     werase( header_window );
 
-    /* Read the host's serial number from SMBIOS/DMI. This file only exists
-     * on physical machines (and is readable by root, which nwipe already
-     * requires); on VMs and inside containers it is typically absent, empty,
-     * or a placeholder such as "Not Specified" / "None". Treat any such
-     * value as "no serial" so the header stays clean. */
-    serial[0] = '\0';
-    {
-        FILE* fp = fopen( "/sys/class/dmi/id/product_serial", "r" );
-        if( fp != NULL )
-        {
-            if( fgets( serial, sizeof( serial ), fp ) != NULL )
-            {
-                /* Strip the trailing newline. */
-                serial[strcspn( serial, "\r\n" )] = '\0';
-            }
-            fclose( fp );
-        }
+    /* Read the host's serial numbers from SMBIOS/DMI via sysfs. Supermicro
+     * (and other barebones) systems serialise the chassis and the system
+     * board independently, so the two fields commonly differ; Dell programs
+     * the same Service Tag into both. Reading both keeps the wipe header
+     * unambiguous about which physical parts were present. */
+    nwipe_read_dmi_field( "/sys/class/dmi/id/product_serial", sys_serial, sizeof( sys_serial ) );
+    nwipe_read_dmi_field( "/sys/class/dmi/id/chassis_serial", chassis_serial, sizeof( chassis_serial ) );
 
-        /* Reject known placeholder / junk serials. */
-        if( serial[0] == '\0' || strcasecmp( serial, "None" ) == 0
-            || strcasecmp( serial, "Not Specified" ) == 0
-            || strcasecmp( serial, "To Be Filled By O.E.M." ) == 0
-            || strcasecmp( serial, "System Serial Number" ) == 0
-            || strcasecmp( serial, "Default string" ) == 0 )
-        {
-            serial[0] = '\0';
-        }
-    }
-
-    /* Prefix the banner with the server's hostname (and serial, when known),
-     * producing "Host: <hostname> | S/N: <serial> | <banner>". If the serial
-     * is unavailable, drop the "S/N:" segment; if even the hostname cannot be
-     * determined, fall back to just the banner. */
+    /* Prefix the banner with the server's hostname and whatever serials are
+     * available. The serials share one compact "S/N" group with sys:/chs:
+     * prefixes so the line stays within an 80-column console, e.g.:
+     *   "<name> | S/N sys:<system> chs:<chassis> | <banner>"
+     * Each serial prefix is emitted only when its value is available; if even
+     * the hostname cannot be determined, fall back to just the banner. */
     if( gethostname( hostname, sizeof( hostname ) ) == 0 && hostname[0] != '\0' )
     {
         /* Ensure the hostname is NUL-terminated (gethostname may not
          * terminate on truncation). */
         hostname[sizeof( hostname ) - 1] = '\0';
 
-        if( serial[0] != '\0' )
+        if( sys_serial[0] != '\0' && chassis_serial[0] != '\0' )
         {
-            snprintf( bannerplus, sizeof( bannerplus ), "Host: %s | S/N: %s | %s", hostname, serial, banner );
+            snprintf( bannerplus, sizeof( bannerplus ), "%s | S/N sys:%s chs:%s | %s", hostname, sys_serial,
+                      chassis_serial, banner );
+        }
+        else if( sys_serial[0] != '\0' )
+        {
+            snprintf( bannerplus, sizeof( bannerplus ), "%s | S/N sys:%s | %s", hostname, sys_serial, banner );
+        }
+        else if( chassis_serial[0] != '\0' )
+        {
+            snprintf( bannerplus, sizeof( bannerplus ), "%s | S/N chs:%s | %s", hostname, chassis_serial, banner );
         }
         else
         {
-            snprintf( bannerplus, sizeof( bannerplus ), "Host: %s | %s", hostname, banner );
+            snprintf( bannerplus, sizeof( bannerplus ), "%s | %s", hostname, banner );
         }
     }
     else
