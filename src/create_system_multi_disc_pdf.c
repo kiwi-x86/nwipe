@@ -45,6 +45,7 @@
 #include "miscellaneous.h"
 #include <libconfig.h>
 #include "conf.h"
+#include "host_identity.h" /* FORK */
 
 extern struct pdf_doc* pdf;
 extern struct pdf_object* page;
@@ -138,7 +139,14 @@ int create_system_multi_disc_pdf( nwipe_thread_data_ptr_t* ptrx )
     pdf = pdf_create( PDF_A4_WIDTH, PDF_A4_HEIGHT, &info );
 
     /* Create footer text string and append the version */
-    snprintf( pdf_footer, sizeof( pdf_footer ), "Disc Erasure by NWIPE version %s", version_string );
+    /* FORK: hostname in the footer of every page */
+    nwipe_host_identity_t host_id;
+    nwipe_host_identity_get( &host_id, nwipe_options.quiet );
+    snprintf( pdf_footer,
+              sizeof( pdf_footer ),
+              "Disc Erasure by NWIPE version %s - Host: %.48s",
+              version_string,
+              host_id.hostname[0] ? host_id.hostname : "unknown" );
 
     pdf_set_font( pdf, "Helvetica" );
     struct pdf_object* page_1 = pdf_append_page( pdf );
@@ -545,16 +553,21 @@ int create_system_multi_disc_pdf( nwipe_thread_data_ptr_t* ptrx )
      * by converting any non alphanumeric characters to an underscore or hyphen
      */
     char PDF_filename[FILENAME_MAX];  // The filename of the PDF certificate/report.
+    /* FORK: filename uses hostname + system S/N (fallback chassis S/N, then "unknown")
+     * instead of UUID + S/N, and no longer modifies the dmidecode fields in place. */
+    char fn_host[NWIPE_HOSTNAME_LENGTH];
+    char fn_serial[NWIPE_DMI_SERIAL_LENGTH];
     replace_non_alphanumeric( end_time_text, '-' );
-    replace_non_alphanumeric( d->dmidecode_system_uuid, '-' );
-    replace_non_alphanumeric( d->dmidecode_system_serial_number, '-' );
+    nwipe_host_identity_filename_safe( host_id.hostname, fn_host, sizeof( fn_host ) );
+    nwipe_host_identity_filename_safe(
+        host_id.system_serial[0] ? host_id.system_serial : host_id.chassis_serial, fn_serial, sizeof( fn_serial ) );
     snprintf( PDF_filename,
               sizeof( PDF_filename ),
-              "%s/nwipe_system_report_%s_host-UUID-%s_host-SN-%s.pdf",
+              "%s/nwipe_system_report_%s_host-%s_SN-%s.pdf",
               nwipe_options.PDFreportpath,
               end_time_text,
-              d->dmidecode_system_uuid,
-              d->dmidecode_system_serial_number );
+              fn_host,
+              fn_serial );
 
     /***********************
      * Write the PDF to disk

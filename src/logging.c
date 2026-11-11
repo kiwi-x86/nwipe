@@ -48,6 +48,7 @@
 #include "options.h"
 #include "logging.h"
 #include "create_pdf.h"
+#include "create_compact_pdf.h" /* FORK */
 #include "miscellaneous.h"
 #include "hpa_dco.h"
 #include "version.h"
@@ -1281,7 +1282,8 @@ void nwipe_log_summary( nwipe_thread_data_ptr_t* ptrx, nwipe_context_t** ptr, in
                    serial_no );
 
         /* Create the PDF report/certificate */
-        if( nwipe_options.PDF_enable == 1 )
+        /* FORK: per-disk reports only in FULL/BOTH mode, see FORK.md */
+        if( nwipe_options.PDF_enable == 1 && nwipe_options.PDF_report_mode != NWIPE_PDF_MODE_COMPACT )
         // if( strcmp( nwipe_options.PDFreportpath, "noPDF" ) != 0 )
         {
             /* to have some progress indication. can help if there are many/slow disks */
@@ -1291,7 +1293,16 @@ void nwipe_log_summary( nwipe_thread_data_ptr_t* ptrx, nwipe_context_t** ptr, in
     }
 
     /* Create a PDF that contains, system information and wipe status for all drives */
-    create_system_multi_disc_pdf( ptrx );
+    /* FORK: upstream calls this unconditionally; here it is gated by PDF_enable and only
+     * written in FULL/BOTH mode. The compact report replaces it in COMPACT/BOTH mode. */
+    if( nwipe_options.PDF_enable == 1 && nwipe_options.PDF_report_mode != NWIPE_PDF_MODE_COMPACT )
+    {
+        create_system_multi_disc_pdf( ptrx );
+    }
+    if( nwipe_options.PDF_enable == 1 && nwipe_options.PDF_report_mode != NWIPE_PDF_MODE_FULL )
+    {
+        create_compact_pdf( ptrx );
+    }
 
     /* Determine the size of throughput so that the correct nomenclature can be used */
     Determine_C_B_nomenclature( total_throughput, total_throughput_string, 13 );

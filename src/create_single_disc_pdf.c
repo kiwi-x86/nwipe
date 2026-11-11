@@ -44,6 +44,7 @@
 #include "miscellaneous.h"
 #include <libconfig.h>
 #include "conf.h"
+#include "host_identity.h" /* FORK */
 
 #define text_size_data 10
 
@@ -124,7 +125,16 @@ int create_single_disc_pdf( nwipe_thread_data_ptr_t* ptrx, nwipe_context_t* ptr 
     pdf = pdf_create( PDF_A4_WIDTH, PDF_A4_HEIGHT, &info );
 
     /* Create footer text string and append the version */
-    snprintf( pdf_footer, sizeof( pdf_footer ), "Disc Erasure by NWIPE version %s", version_string );
+    /* FORK: hostname in the footer of every page */
+    {
+        nwipe_host_identity_t host_id;
+        nwipe_host_identity_get( &host_id, nwipe_options.quiet );
+        snprintf( pdf_footer,
+                  sizeof( pdf_footer ),
+                  "Disc Erasure by NWIPE version %s - Host: %.48s",
+                  version_string,
+                  host_id.hostname[0] ? host_id.hostname : "unknown" );
+    }
 
     pdf_set_font( pdf, "Helvetica" );
     struct pdf_object* page_1 = pdf_append_page( pdf );
@@ -609,17 +619,31 @@ int create_single_disc_pdf( nwipe_thread_data_ptr_t* ptrx, nwipe_context_t* ptr 
      * Sanitize the strings that we are going to use to create the report filename
      * by converting any non alphanumeric characters to an underscore or hyphen
      */
-    replace_non_alphanumeric( end_time_text, '-' );
-    replace_non_alphanumeric( c->device_model, '_' );
-    replace_non_alphanumeric( c->device_serial_no, '_' );
-    snprintf( c->PDF_filename,
-              sizeof( c->PDF_filename ),
-              "%s/nwipe_report_%s_Model_%s_Serial_%s_device_%s.pdf",
-              nwipe_options.PDFreportpath,
-              end_time_text,
-              c->device_model,
-              c->device_serial_no,
-              c->device_name_terse );
+    /* FORK: sanitise copies, not the context itself, so model/serial stay intact
+     * for the compact report written afterwards. Hostname added to the filename. */
+    {
+        char fn_model[256];
+        char fn_serial[sizeof( c->device_serial_no )];
+        char fn_host[NWIPE_HOSTNAME_LENGTH];
+        nwipe_host_identity_t host_id;
+
+        snprintf( fn_model, sizeof( fn_model ), "%s", c->device_model ? c->device_model : "" );
+        snprintf( fn_serial, sizeof( fn_serial ), "%s", c->device_serial_no );
+        replace_non_alphanumeric( end_time_text, '-' );
+        replace_non_alphanumeric( fn_model, '_' );
+        replace_non_alphanumeric( fn_serial, '_' );
+        nwipe_host_identity_get( &host_id, nwipe_options.quiet );
+        nwipe_host_identity_filename_safe( host_id.hostname, fn_host, sizeof( fn_host ) );
+        snprintf( c->PDF_filename,
+                  sizeof( c->PDF_filename ),
+                  "%s/nwipe_report_%s_host-%s_Model_%s_Serial_%s_device_%s.pdf",
+                  nwipe_options.PDFreportpath,
+                  end_time_text,
+                  fn_host,
+                  fn_model,
+                  fn_serial,
+                  c->device_name_terse );
+    }
 
     pdf_save( pdf, c->PDF_filename );
     pdf_destroy( pdf );

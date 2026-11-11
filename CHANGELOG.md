@@ -1,5 +1,31 @@
 RELEASE NOTES
 =============
+v0.43.1-fork (based on upstream v0.43.1)
+-----------------------
+Fork-specific changes, see FORK.md for details and the re-apply procedure.
+
+- GUI header shows hostname, system S/N and chassis S/N.
+- New compact PDF report (default): one file per run covering all disks, with host
+  identity, erasure parameters, a per-disk result table, technician/signature lines and
+  page numbers. Multi-page when needed (about 40 disks on page 1).
+  HPA/DCO is not shown in the compact report and does not affect its status, so disks
+  behind RAID controllers (where hdparm cannot read HPA/DCO) no longer show
+  "ERASED WITH WARNINGS". Only I/O retries give a warning.
+  Result badge: `ERASED`, `ERASED (!)` or `FAILED`.
+- Optional company logo in the compact report, embedded at build time:
+  `./configure --with-logo=FILE` (PNG without transparency, or JPEG).
+  `scripts/install.sh` passes `NWIPE_LOGO=FILE` through.
+- New option `--pdfmode=compact|full|both` / `PDF_Certificate.PDF_Report_Mode` in
+  nwipe.conf. `full` gives the upstream per-disk + system reports; `both` writes all.
+- Hostname added to the footer and filename of the upstream per-disk and system reports.
+  The system report filename is now `..._host-<host>_SN-<serial>.pdf` (no UUID).
+- The system report is no longer written when PDF output is disabled (upstream always
+  wrote it).
+- Fix: per-disk report no longer overwrites the device model/serial in place while
+  building its filename.
+- Fix: misc thread data is zero-initialised, so missing dmidecode data no longer shows
+  garbage in reports.
+
 v0.43
 -----------------------
 # Notable New Features

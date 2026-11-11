@@ -30,9 +30,26 @@
 #include "conf.h"
 #include "cpu_features.h"
 #include "libconfig.h"
+#include <strings.h> /* FORK: strcasecmp */
 
 /* The global options struct. */
 nwipe_options_t nwipe_options;
+
+/* FORK: parse COMPACT|FULL|BOTH (case-insensitive). Returns 0 on success. */
+static int nwipe_pdf_mode_from_string( const char* s, int* mode )
+{
+    if( s == NULL )
+        return -1;
+    if( !strcasecmp( s, "COMPACT" ) )
+        *mode = NWIPE_PDF_MODE_COMPACT;
+    else if( !strcasecmp( s, "FULL" ) )
+        *mode = NWIPE_PDF_MODE_FULL;
+    else if( !strcasecmp( s, "BOTH" ) )
+        *mode = NWIPE_PDF_MODE_BOTH;
+    else
+        return -1;
+    return 0;
+}
 
 int nwipe_options_parse( int argc, char** argv )
 {
@@ -152,6 +169,9 @@ int nwipe_options_parse( int argc, char** argv )
 
         /* Enables PDF duplex mode where each new section starts on a odd (recto) page */
         { "pdfduplex", no_argument, 0, 0 },
+
+        /* FORK: which PDF reports to write, compact|full|both */
+        { "pdfmode", required_argument, 0, 0 },
 
         /* Display program version. */
         { "verbose", no_argument, 0, 0 },
@@ -335,6 +355,20 @@ int nwipe_options_parse( int argc, char** argv )
                     "PDF_Certificate.PDF_Preview in nwipe.conf returned a value that was neither ENABLED or DISABLED" );
                 nwipe_options.PDF_preview_details = 1; /* Default to Enabled */
             }
+        }
+    }
+
+    /*
+     * FORK: PDF report mode, COMPACT (default) | FULL | BOTH. See FORK.md
+     */
+    nwipe_options.PDF_report_mode = NWIPE_PDF_MODE_COMPACT;
+    if( nwipe_conf_read_setting( "PDF_Certificate.PDF_Report_Mode", &read_value ) == 0 )
+    {
+        if( nwipe_pdf_mode_from_string( read_value, &nwipe_options.PDF_report_mode ) != 0 )
+        {
+            nwipe_log( NWIPE_LOG_ERROR,
+                       "PDF_Certificate.PDF_Report_Mode in nwipe.conf must be COMPACT, FULL or BOTH, using COMPACT" );
+            nwipe_options.PDF_report_mode = NWIPE_PDF_MODE_COMPACT;
         }
     }
 
@@ -669,6 +703,17 @@ int nwipe_options_parse( int argc, char** argv )
                     break;
                 }
 
+                /* FORK */
+                if( strcmp( nwipe_options_long[i].name, "pdfmode" ) == 0 )
+                {
+                    if( nwipe_pdf_mode_from_string( optarg, &nwipe_options.PDF_report_mode ) != 0 )
+                    {
+                        fprintf( stderr, "Error: --pdfmode must be compact, full or both, you typed '%s'.\n", optarg );
+                        exit( EINVAL );
+                    }
+                    break;
+                }
+
                 if( strcmp( nwipe_options_long[i].name, "prng-benchmark" ) == 0 )
                 {
                     nwipe_options.prng_benchmark_only = 1;
@@ -682,6 +727,14 @@ int nwipe_options_parse( int argc, char** argv )
                     if( nwipe_options.prng_bench_seconds > 10.0 )
                         nwipe_options.prng_bench_seconds = 10.0;
                     break;
+                }
+
+                /* FORK: upstream lists --version but never handles it here, so it
+                 * fell through to exit( EINVAL ). Behave like -V. */
+                if( strcmp( nwipe_options_long[i].name, "version" ) == 0 )
+                {
+                    printf( "%s version %s\n", program_name, version_string );
+                    exit( EXIT_SUCCESS );
                 }
 
                 /* getopt_long should raise on invalid option, so we should never get here. */

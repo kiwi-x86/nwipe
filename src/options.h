@@ -42,6 +42,11 @@
 #define PATHNAME_MAX 2048
 #define NWIPE_USE_DIRECT_IO
 
+/* FORK: which PDF reports are written, see FORK.md */
+#define NWIPE_PDF_MODE_COMPACT 0 /* one compact report for the whole host (default) */
+#define NWIPE_PDF_MODE_FULL 1 /* upstream: one report per disk + system report */
+#define NWIPE_PDF_MODE_BOTH 2 /* compact + upstream reports */
+
 /* Function prototypes for loading options from the environment and command line. */
 int nwipe_options_parse( int argc, char** argv );
 void nwipe_options_log( void );
@@ -77,6 +82,7 @@ typedef struct
     int PDF_toggle_host_info;  // 0=Disable visibility of host Info on PDF. UUID & S/N
     int PDFtag;  // Enable display of hostID, such as UUID or serial no. on PDF report.
     int PDF_duplex;  // Enables duplex mode, each section starts on a odd page, intentionally blank pages are inserted.
+    int PDF_report_mode;  // FORK: NWIPE_PDF_MODE_COMPACT / _FULL / _BOTH
     nwipe_verify_t verify;  // A flag to indicate whether writes should be verified.
     nwipe_io_mode_t io_mode;  // Global runtime I/O mode selection (auto/direct/cached), note in auto mode each
                               // drive may use a different I/O mode if directIO isn't supported on a given drive.

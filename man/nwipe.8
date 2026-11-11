@@ -277,6 +277,13 @@ Enables a field on the PDF that holds a tag that identifies the host computer
 Enables insertion of intentionally blank pages between sections on PDFs
 
 .TP
+\fB\-\-pdfmode\fR=\fIMODE\fR
+Which PDF reports to write. \fIcompact\fR (default) writes one short report
+for the whole host: hostname, system/chassis serial, erasure parameters and one
+row per disk. \fIfull\fR writes the upstream reports (one per disk plus a
+system report). \fIboth\fR writes all of them. Overrides
+PDF_Certificate.PDF_Report_Mode in nwipe.conf.
+.TP
 \fB\-e\fR, \fB\-\-exclude\fR=\fIDEVICES\fR
 Up to ten comma separated devices to be excluded, examples:
  --exclude=/dev/sdc

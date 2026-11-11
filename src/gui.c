@@ -48,9 +48,11 @@
 #include <panel.h>
 #include <stdint.h>
 #include <libconfig.h>
+#include <stdio.h>
 #include <string.h>
 #include <strings.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include "nwipe.h"
 #include "context.h"
@@ -70,6 +72,7 @@
 #include "cpu_features.h"
 #include "se_ata_gui.h"
 #include "se_nvme_gui.h"
+#include "host_identity.h" /* FORK */
 
 #define NWIPE_GUI_PANE 8
 
@@ -708,7 +711,13 @@ void nwipe_gui_create_main_window()
 void nwipe_gui_create_header_window()
 {
     char anon_label[] = " (ANONYMIZED)";
-    char bannerplus[80];
+    nwipe_host_identity_t host_id; /* FORK: hostname + DMI serials, see host_identity.c */
+    /* hostname + both serials + banner + "(ANONYMIZED)" + framing text + slack */
+    char bannerplus[sizeof( host_id.hostname ) + sizeof( host_id.system_serial ) + sizeof( host_id.chassis_serial )
+                    + 128];
+    const char* hostname = host_id.hostname;
+    const char* sys_serial = host_id.system_serial;
+    const char* chassis_serial = host_id.chassis_serial;
 
     /* Create the header window. */
     header_window = newwin( NWIPE_GUI_HEADER_H, NWIPE_GUI_HEADER_W, NWIPE_GUI_HEADER_Y, NWIPE_GUI_HEADER_X );
@@ -728,12 +737,50 @@ void nwipe_gui_create_header_window()
     /* Clear the header window. */
     werase( header_window );
 
-    /* If in anonymized mode modify the title banner to reflect this */
-    strcpy( bannerplus, banner );
+    /* Read the host's serial numbers from SMBIOS/DMI via sysfs. Supermicro
+     * (and other barebones) systems serialise the chassis and the system
+     * board independently, so the two fields commonly differ; Dell programs
+     * the same Service Tag into both. Reading both keeps the wipe header
+     * unambiguous about which physical parts were present. */
+    /* The operator at the console always sees the real identity; anonymisation
+     * (--quiet) applies to the logs and PDF reports only. */
+    nwipe_host_identity_get( &host_id, 0 );
 
+    /* Prefix the banner with the server's hostname and whatever serials are
+     * available. The serials share one compact "S/N" group with sys:/chs:
+     * prefixes so the line stays within an 80-column console, e.g.:
+     *   "<name> | S/N sys:<system> chs:<chassis> | <banner>"
+     * Each serial prefix is emitted only when its value is available; if even
+     * the hostname cannot be determined, fall back to just the banner. */
+    if( hostname[0] != '\0' )
+    {
+        if( sys_serial[0] != '\0' && chassis_serial[0] != '\0' )
+        {
+            snprintf( bannerplus, sizeof( bannerplus ), "%s | S/N sys:%s chs:%s | %s", hostname, sys_serial,
+                      chassis_serial, banner );
+        }
+        else if( sys_serial[0] != '\0' )
+        {
+            snprintf( bannerplus, sizeof( bannerplus ), "%s | S/N sys:%s | %s", hostname, sys_serial, banner );
+        }
+        else if( chassis_serial[0] != '\0' )
+        {
+            snprintf( bannerplus, sizeof( bannerplus ), "%s | S/N chs:%s | %s", hostname, chassis_serial, banner );
+        }
+        else
+        {
+            snprintf( bannerplus, sizeof( bannerplus ), "%s | %s", hostname, banner );
+        }
+    }
+    else
+    {
+        strcpy( bannerplus, banner );
+    }
+
+    /* If in anonymized mode modify the title banner to reflect this */
     if( nwipe_options.quiet )
     {
-        strcat( bannerplus, anon_label );
+        strncat( bannerplus, anon_label, sizeof( bannerplus ) - strlen( bannerplus ) - 1 );
     }
 
     /* Print the product banner. */

@@ -19,6 +19,7 @@ test-driver
 .dirstamp
 *.o
 src/git_hash.h
+src/nwipe_logo.h
 src/nwipe
 tests/unit/test_round_size
 

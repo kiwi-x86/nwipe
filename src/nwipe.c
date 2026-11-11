@@ -603,6 +603,9 @@ int main( int argc, char** argv )
     /* Pass a pointer to a struct containing all data to the signal handler. */
     nwipe_misc_thread_data_t nwipe_misc_thread_data;
     nwipe_thread_data_ptr_t nwipe_thread_data_ptr;
+    /* FORK: zero the struct so dmidecode fields are empty strings, not stack garbage,
+     * when dmidecode is unavailable or returns nothing (containers, some VMs). */
+    memset( &nwipe_misc_thread_data, 0, sizeof( nwipe_misc_thread_data ) );
     nwipe_thread_data_ptr.c = c2;
     nwipe_misc_thread_data.nwipe_enumerated = nwipe_enumerated;
     nwipe_misc_thread_data.nwipe_selected = 0;

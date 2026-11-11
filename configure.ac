@@ -76,6 +76,37 @@ AS_CASE([" $LDFLAGS "], [*" -static "*|*" -all-static "*], [
 AC_SUBST([PARTED_STATIC_LIBS])
 
 # Checks for header files.
+# FORK: optional company logo, embedded into the binary at build time and drawn
+# in the compact PDF report. There is no runtime option on purpose.
+AC_ARG_WITH([logo],
+    [AS_HELP_STRING([--with-logo=FILE],
+        [Embed a PNG or JPEG logo in the compact PDF report (default: no logo)])],
+    [], [with_logo=no])
+NWIPE_LOGO_FILE=
+logo_summary=none
+AS_CASE([$with_logo],
+    [no|""], [],
+    [yes], [AC_MSG_ERROR([--with-logo needs a file, e.g. --with-logo=/path/logo.png])],
+    [*\ *], [AC_MSG_ERROR([logo path must not contain spaces: $with_logo])],
+    [
+    test -f "$with_logo" && test -r "$with_logo" || AC_MSG_ERROR([logo file not readable: $with_logo])
+    AS_CASE([$with_logo], [/*], [NWIPE_LOGO_FILE=$with_logo], [NWIPE_LOGO_FILE=`pwd`/$with_logo])
+    logo_magic=`od -An -N8 -tx1 "$NWIPE_LOGO_FILE" | tr -d ' \n'`
+    AS_CASE([$logo_magic],
+        [89504e470d0a1a0a], [
+            logo_color=`od -An -j25 -N1 -tu1 "$NWIPE_LOGO_FILE" | tr -d ' \n'`
+            logo_interlace=`od -An -j28 -N1 -tu1 "$NWIPE_LOGO_FILE" | tr -d ' \n'`
+            AS_CASE([$logo_color], [4|6], [AC_MSG_ERROR([PNG logo has an alpha channel (transparency), which the PDF library cannot embed.
+  Flatten it onto white first, e.g.:
+    convert $with_logo -background white -alpha remove -alpha off logo-flat.png
+  or save it as JPEG.])])
+            test "x$logo_interlace" = x0 || AC_MSG_ERROR([interlaced PNG logo is not supported; re-save it without interlacing])
+            logo_summary="PNG $NWIPE_LOGO_FILE"],
+        [ffd8ff*], [logo_summary="JPEG $NWIPE_LOGO_FILE"],
+        [AC_MSG_ERROR([logo must be a PNG or JPEG file: $with_logo])])
+    ])
+AC_SUBST([NWIPE_LOGO_FILE])
+
 AC_CHECK_HEADERS([fcntl.h inttypes.h netinet/in.h stddef.h stdint.h stdlib.h \
                   string.h sys/file.h sys/ioctl.h unistd.h])
 
@@ -101,7 +132,8 @@ AS_ECHO(["    CXXFLAGS ...................... $CXXFLAGS"])
 AS_ECHO(["    CPPFLAGS ...................... $CPPFLAGS"])
 AS_ECHO(["    LDFLAGS ....................... $LDFLAGS"])
 AS_ECHO([""])
-AS_ECHO(["    NVMe secure erase ............. $have_libnvme"])
+AS_ECHO(["  NVMe secure erase ............. $have_libnvme"])
+AS_ECHO(["  Report logo ................... $logo_summary"])
 AS_IF([test "x$have_libnvme" = xyes], [
   AS_ECHO(["      libnvme version ............. $libnvme_version"])
   AS_ECHO(["      NVME_VERSION_PROJECT ........ $have_nvme_version_project"])

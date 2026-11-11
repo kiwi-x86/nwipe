@@ -6,8 +6,8 @@ AM_LDFLAGS =
 bin_PROGRAMS = nwipe
 
 # Versioning; we use FORCE to always re-build this header.
-BUILT_SOURCES = git_hash.h
-CLEANFILES = git_hash.h
+BUILT_SOURCES = git_hash.h nwipe_logo.h
+CLEANFILES = git_hash.h nwipe_logo.h
 
 git_hash.h: FORCE
 	@h="$${NWIPE_GIT_HASH-}"; \
@@ -15,6 +15,20 @@ git_hash.h: FORCE
 	printf '#define NWIPE_GIT_HASH "%s"\n' "$$h" > $@
 
 FORCE:
+
+# FORK: company logo for the compact PDF report, chosen at build time with
+# ./configure --with-logo=FILE. The file is embedded as a byte array; without
+# --with-logo the header only defines nothing and the report has no logo.
+# Depends on Makefile so re-running configure with another logo rebuilds it.
+nwipe_logo.h: Makefile $(NWIPE_LOGO_FILE)
+	$(AM_V_GEN)f='$(NWIPE_LOGO_FILE)'; \
+	{ echo '/* Generated at build time from ./configure --with-logo. Do not edit. */'; \
+	  if test -n "$$f"; then \
+	    echo '#define NWIPE_HAVE_LOGO 1'; \
+	    echo 'static const unsigned char nwipe_logo_data[] = {'; \
+	    od -An -v -tx1 "$$f" | sed -e 's/[0-9a-f][0-9a-f]/0x&,/g' || exit 1; \
+	    echo '};'; \
+	  fi; } > $@.tmp && mv $@.tmp $@
 
 # Core sources
 NWIPE_CORE = \
@@ -40,7 +54,8 @@ NWIPE_CORE = \
     cpu_features.c cpu_features.h \
     round_size.c round_size.h \
     ANSI-color-codes.h \
-    display_help.c
+	display_help.c \
+	host_identity.c host_identity.h
 
 # PRNG implementations
 NWIPE_PRNG = \
@@ -61,7 +76,8 @@ NWIPE_PDF = \
     create_pdf.c create_pdf.h \
     create_pdf_graph.c \
     create_single_disc_pdf.c \
-    create_system_multi_disc_pdf.c \
+	create_system_multi_disc_pdf.c \
+	create_compact_pdf.c create_compact_pdf.h \
     embedded_images/shred_db.jpg.c embedded_images/shred_db.jpg.h \
     embedded_images/tick_erased.jpg.c embedded_images/tick_erased.jpg.h \
     embedded_images/redcross.c embedded_images/redcross.h \

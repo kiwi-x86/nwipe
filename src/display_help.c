@@ -202,6 +202,11 @@ void display_help()
     "      --pdfduplex\n" reset \
     "        Enables insertion of intentionally blank pages between sections on PDFs\n\n" \
     BHCYN \
+    "      --pdfmode=MODE\n" reset \
+    "        Which PDF reports to write: compact (default, one short report for\n" \
+    "        the whole host), full (upstream per-disk + system reports) or both.\n" \
+    "        Overrides PDF_Certificate.PDF_Report_Mode in nwipe.conf.\n\n" \
+    BHCYN \
     "  -e, --exclude=DEVICES\n" reset \
     "        Up to ten comma separated devices to be excluded.\n" \
     "        Examples:\n" \
