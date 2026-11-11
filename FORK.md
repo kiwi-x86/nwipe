@@ -117,7 +117,7 @@ The logo is compiled into the binary; there is no runtime option or config key.
 
 ```sh
 ./configure --with-logo=/path/logo.png      # or .jpg
-NWIPE_LOGO=/path/logo.png sudo ./scripts/install.sh
+sudo NWIPE_LOGO=/path/logo.png ./scripts/install.sh   # variable after sudo, sudo drops env vars
 ```
 
 - `configure` checks the file: PNG or JPEG only. PNG with transparency (alpha) or

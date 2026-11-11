@@ -20,6 +20,13 @@ die()  { printf '\033[1;31mERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 # ----------------------------------------------------------------------------
 [ "$(id -u)" -eq 0 ] || die "must run as root (installs packages + writes to /usr/local). Re-run with sudo."
 
+# Resolve the logo path now, relative to where the script was started; the build
+# later runs in a temp dir, where a relative path would no longer match.
+if [ -n "$NWIPE_LOGO" ]; then
+    [ -f "$NWIPE_LOGO" ] && [ -r "$NWIPE_LOGO" ] || die "NWIPE_LOGO not readable: $NWIPE_LOGO (from $(pwd))"
+    NWIPE_LOGO=$(readlink -f -- "$NWIPE_LOGO")
+fi
+
 # ----------------------------------------------------------------------------
 # Detect the package manager and install build + runtime dependencies
 # ----------------------------------------------------------------------------
@@ -88,10 +95,7 @@ build_nwipe() {
     ./autogen.sh
     local cfg_args=()
     [ "$WITH_NVME" = no ] && cfg_args+=(--without-libnvme)
-    if [ -n "$NWIPE_LOGO" ]; then
-        [ -r "$NWIPE_LOGO" ] || die "NWIPE_LOGO not readable: $NWIPE_LOGO"
-        cfg_args+=("--with-logo=$(readlink -f "$NWIPE_LOGO")")
-    fi
+    [ -n "$NWIPE_LOGO" ] && cfg_args+=("--with-logo=$NWIPE_LOGO")
     ./configure "${cfg_args[@]}"
 
     log "Compiling (make -j$(nproc))…"
